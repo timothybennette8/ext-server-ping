@@ -1,10 +1,12 @@
 servers:
-  - server-ip: example.com
-    server-port: 25565
+  - id: server_one
+    port: 25565
+    ip: example.com
     update-interval: 30
     debug: false
 
-  - server-ip: example.org
-    server-port: 25566
-    update-interval: 60
+  - id: server_two
+    ip: example.org
+    port: 25566
+    update-interval: 30
     debug: false
