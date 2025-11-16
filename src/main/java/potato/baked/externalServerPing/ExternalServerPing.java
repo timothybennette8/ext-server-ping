@@ -57,6 +57,9 @@ import java.util.logging.Level;
  */
 public final class ExternalServerPing extends JavaPlugin implements TabExecutor {
 
+	// Minecraft status protocol version (for simple status ping this is fine)
+	private static final int PROTOCOL_VERSION = 754;
+
 	// Per-server configuration + runtime state
 	public static class ServerData {
 		String id;
@@ -84,6 +87,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 
 		saveDefaultConfig();
 		loadConfigValues();
+		startAllPingTasks();
 
 		if (getCommand("externalserver") != null) {
 			getCommand("externalserver").setExecutor(this);
@@ -105,11 +109,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 	@Override
 	public void onDisable() {
 		getLogger().info("ExternalServerPing disabling. Cancelling ping tasks...");
-		for (ServerData server : servers.values()) {
-			if (server.pingTask != null) {
-				server.pingTask.cancel();
-			}
-		}
+		cancelAllPingTasks();
 		servers.clear();
 		getLogger().info("ExternalServerPing disabled.");
 	}
@@ -118,17 +118,17 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 	 * Load configuration, support both:
 	 * - Multi server: list under 'servers:'
 	 * - Single server: top-level 'server-ip', 'server-port', etc.
+	 *
+	 * This method reads config and populates the servers map.
 	 */
 	private void loadConfigValues() {
-		// Cancel old tasks
-		for (ServerData s : servers.values()) {
-			if (s.pingTask != null) {
-				s.pingTask.cancel();
-			}
-		}
+		// Cancel tasks and clear old config/state
+		cancelAllPingTasks();
 		servers.clear();
 
-		// Multi server logic
+		getLogger().info("Loading configuration from config.yml...");
+
+		// Multi-server list
 		List<Map<?, ?>> list = getConfig().getMapList("servers");
 
 		if (list != null && !list.isEmpty()) {
@@ -163,8 +163,6 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 				getLogger().info(String.format(
 						"Loaded server #%d: id='%s', ip='%s', port=%d, update-interval=%ds, debug=%s, ping-only-if-players=%s",
 						i + 1, id, ip, port, interval, debug, s.pingOnlyIfPlayers));
-
-				startPinging(s);
 			}
 
 			if (servers.isEmpty()) {
@@ -177,7 +175,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 			return;
 		}
 
-		// Single server fallback
+		// Single-server fallback
 		String ip = getConfig().getString("server-ip", null);
 		int port = getConfig().getInt("server-port", -1);
 		int interval = getConfig().getInt("update-interval", 30);
@@ -203,9 +201,34 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 				"Loaded server: id='default', ip='%s', port=%d, update-interval=%ds, debug=%s, ping-only-if-players=%s",
 				ip, port, interval, debug, s.pingOnlyIfPlayers));
 
-		startPinging(s);
 		getLogger()
 				.warning("You are using the legacy config format. Consider migrating to the 'servers:' list schema.");
+	}
+
+	/**
+	 * Start ping tasks for all configured servers.
+	 */
+	private void startAllPingTasks() {
+		if (servers.isEmpty()) {
+			getLogger().warning("No servers configured - no ping tasks will be started.");
+			return;
+		}
+
+		for (ServerData server : servers.values()) {
+			startPinging(server);
+		}
+	}
+
+	/**
+	 * Cancel all running ping tasks without clearing server definitions.
+	 */
+	private void cancelAllPingTasks() {
+		for (ServerData server : servers.values()) {
+			if (server.pingTask != null) {
+				server.pingTask.cancel();
+				server.pingTask = null;
+			}
+		}
 	}
 
 	// Helpers for config map access
@@ -243,6 +266,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 	 * Start a ping task for a given server.
 	 */
 	private void startPinging(ServerData server) {
+		// Cancel any existing task for this server
 		if (server.pingTask != null) {
 			server.pingTask.cancel();
 		}
@@ -250,8 +274,6 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 		getLogger().info("Starting ping task for server '" + server.id + "' (" +
 				server.ip + ":" + server.port + ") every " + server.updateInterval +
 				" seconds (ping-only-if-players=" + server.pingOnlyIfPlayers + ").");
-
-		final int protocolVersion = 754; // MC protocol
 
 		server.pingTask = new BukkitRunnable() {
 			@Override
@@ -283,7 +305,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 					DataOutputStream handshake = new DataOutputStream(handshakeBytes);
 
 					handshake.writeByte(0x00); // packet id
-					writeVarInt(handshake, protocolVersion); // protocol version
+					writeVarInt(handshake, PROTOCOL_VERSION); // protocol version
 					writeVarInt(handshake, server.ip.length());
 					handshake.writeBytes(server.ip);
 					handshake.writeShort(server.port);
@@ -332,7 +354,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 					if (server.debug) {
 						getLogger().info(
 								"[ExternalServerPing] (" + server.id + ") Success: online=" + server.onlinePlayers +
-										", max=" + server.maxPlayers + ", motd=" + server.motd + ", ping=" + server.ping
+										", max=" + server.maxPlayers + ", ping=" + server.ping
 										+ "ms");
 					}
 
@@ -383,6 +405,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 		if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
 			reloadConfig();
 			loadConfigValues();
+			startAllPingTasks();
 			sender.sendMessage("§a[ExternalServerPing] Configuration reloaded and ping tasks restarted!");
 			getLogger().info("Configuration reloaded via /externalserver reload.");
 			return true;
@@ -458,9 +481,9 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 			String raw = identifier.trim();
 
 			// Quick test placeholder: %externalserver_test%
-			if (raw.equalsIgnoreCase("test")) {
-				return "OK";
-			}
+			// if (raw.equalsIgnoreCase("test")) {
+			// return "OK";
+			// }
 
 			// Pattern: <id>_<metric> e.g. "server_one_status"
 			int idx = raw.lastIndexOf('_');
