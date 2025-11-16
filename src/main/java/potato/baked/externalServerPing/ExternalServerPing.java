@@ -64,7 +64,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 		int port;
 		int updateInterval;
 		boolean debug;
-		boolean pingOnlyIfPlayers; // NEW: only ping when lobby has players
+		boolean pingOnlyIfPlayers;
 
 		BukkitTask pingTask;
 
@@ -353,7 +353,6 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 	}
 
 	// VarInt helpers for Minecraft protocol
-
 	private static void writeVarInt(OutputStream out, int value) throws IOException {
 		while ((value & 0xFFFFFF80) != 0L) {
 			out.write((value & 0x7F) | 0x80);
@@ -379,7 +378,6 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 	}
 
 	// Command handling
-
 	@Override
 	public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
 		if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
