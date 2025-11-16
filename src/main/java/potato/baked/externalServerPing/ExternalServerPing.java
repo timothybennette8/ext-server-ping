@@ -116,8 +116,8 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 
 	/**
 	 * Load configuration, support both:
-	 * - NEW: list under 'servers:'
-	 * - LEGACY: top-level 'server-ip', 'server-port', etc.
+	 * - Multi server: list under 'servers:'
+	 * - Single server: top-level 'server-ip', 'server-port', etc.
 	 */
 	private void loadConfigValues() {
 		// Cancel old tasks
@@ -128,11 +128,11 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 		}
 		servers.clear();
 
-		getLogger().info("Loading configuration from config.yml...");
-
+		// Multi server logic
 		List<Map<?, ?>> list = getConfig().getMapList("servers");
+
 		if (list != null && !list.isEmpty()) {
-			getLogger().info("Detected 'servers' list in config.yml with " + list.size() + " entries.");
+
 			for (int i = 0; i < list.size(); i++) {
 				Map<?, ?> entry = list.get(i);
 				String id = getString(entry, "id", "server_" + (i + 1));
@@ -149,10 +149,6 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 				}
 
 				String key = id.toLowerCase(Locale.ROOT);
-				if (servers.containsKey(key)) {
-					getLogger().warning("Duplicate server id '" + id + "' (case-insensitive). " +
-							"Only the last one will be used.");
-				}
 
 				ServerData s = new ServerData();
 				s.id = id;
@@ -181,8 +177,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 			return;
 		}
 
-		// Legacy fallback: single server config
-		getLogger().warning("No 'servers' list found in config.yml. Falling back to legacy single-server schema.");
+		// Single server fallback
 		String ip = getConfig().getString("server-ip", null);
 		int port = getConfig().getInt("server-port", -1);
 		int interval = getConfig().getInt("update-interval", 30);
@@ -205,7 +200,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 		servers.put("default", s);
 
 		getLogger().info(String.format(
-				"Loaded legacy server: id='default', ip='%s', port=%d, update-interval=%ds, debug=%s, ping-only-if-players=%s",
+				"Loaded server: id='default', ip='%s', port=%d, update-interval=%ds, debug=%s, ping-only-if-players=%s",
 				ip, port, interval, debug, s.pingOnlyIfPlayers));
 
 		startPinging(s);
@@ -256,7 +251,7 @@ public final class ExternalServerPing extends JavaPlugin implements TabExecutor 
 				server.ip + ":" + server.port + ") every " + server.updateInterval +
 				" seconds (ping-only-if-players=" + server.pingOnlyIfPlayers + ").");
 
-		final int protocolVersion = 754; // MC protocol, good enough for status
+		final int protocolVersion = 754; // MC protocol
 
 		server.pingTask = new BukkitRunnable() {
 			@Override
