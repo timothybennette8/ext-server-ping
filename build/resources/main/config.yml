@@ -1,4 +1,14 @@
-server-ip: example.com
-server-port: 25565
-update-interval: 30 # in seconds
-debug: false
+servers:
+  - id: server_one
+    port: 25565
+    ip: example.com
+    update-interval: 30
+    debug: false
+    ping-only-if-players: false
+
+  - id: server_two
+    ip: example.org
+    port: 25566
+    update-interval: 30
+    debug: false
+    ping-only-if-players: true

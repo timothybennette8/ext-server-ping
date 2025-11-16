@@ -4,9 +4,11 @@ servers:
     ip: example.com
     update-interval: 30
     debug: false
+    ping-only-if-players: false
 
   - id: server_two
     ip: example.org
     port: 25566
     update-interval: 30
     debug: false
+    ping-only-if-players: true
